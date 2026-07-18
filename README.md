@@ -492,3 +492,174 @@ Use `SET NULL` when the child record should still exist even after the parent is
 ---
 
 *Since you're building MERN stack projects, note that MongoDB doesn't enforce these constraints natively the way SQL does — you'd implement similar validation logic (required fields, unique indexes, default values) at the schema level using Mongoose.*
+
+
+
+# DBMS / SQL Notes — Database & Query Basics
+
+Based on the SQL script covering: database/table creation, constraints, `INSERT`, `SELECT`, aliasing, computed columns, and `DISTINCT`.
+
+---
+
+## 1. Database & Table Creation
+
+```sql
+CREATE DATABASE dbms;
+
+CREATE TABLE users(
+    user_id INTEGER PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL
+);
+```
+
+**Key concepts:**
+| Term | Meaning |
+|---|---|
+| `PRIMARY KEY` | Uniquely identifies each row; implicitly `NOT NULL` + `UNIQUE`. Only one per table. |
+| `AUTO_INCREMENT` | Auto-generates the next integer value when you insert `NULL`/omit the column. MySQL-specific (Postgres uses `SERIAL`/`IDENTITY`). |
+| `NOT NULL` | Column must always have a value. |
+| `UNIQUE` | No two rows can share the same value in that column (unlike primary key, a table can have many `UNIQUE` columns, and `UNIQUE` allows one `NULL` in most DBs). |
+| `VARCHAR(255)` | Variable-length string, max 255 chars. |
+
+**Note on your script:** `NOt null` and similar mixed-case keywords work fine — SQL keywords are **case-insensitive**. Only string/identifier values (like table names on some OS/DBs) can be case-sensitive.
+
+---
+
+## 2. Inserting Data
+
+```sql
+INSERT INTO dbms.users(user_id, name, email, password)
+VALUE (NULL, 'karan sharma', 'karansharma@gmail.com', '1234');
+
+INSERT INTO dbms.users VALUE (NULL, 'ankit', 'ankit@gmail.com', '33333');
+
+INSERT INTO dbms.users(user_id, name, email, password) VALUE
+(NULL, 'karan sharma', 'karansharma1@gmail.com', '12342'),
+(NULL, 'karan sharma', 'karansharma12@gmail.com', '12342');
+```
+
+**Key concepts:**
+- `VALUE` and `VALUES` are both accepted by MySQL (`VALUES` is the standard/preferred keyword).
+- Passing `NULL` for `user_id` lets `AUTO_INCREMENT` generate the next number automatically.
+- The last statement shows a **multi-row insert** — inserting several rows in a single statement (more efficient than multiple separate `INSERT`s).
+- Duplicate `name` values ('karan sharma' appears 3 times) are allowed because `name` has no `UNIQUE` constraint — only `email` does.
+- ⚠️ If you tried to insert a duplicate **email**, this would throw a `Duplicate entry` error due to the `UNIQUE` constraint.
+
+---
+
+## 3. Basic SELECT Queries
+
+```sql
+SELECT * FROM dbms.users;
+SELECT model, price, rating FROM dbms.smartphones;
+```
+
+- `SELECT *` → returns all columns (fine for exploration, avoid in production code — explicit columns are faster and safer).
+- `SELECT col1, col2` → returns only specified columns, in the order listed.
+
+```sql
+SELECT * FROM dbms.smartphones WHERE 1;
+```
+
+- `WHERE 1` is a condition that always evaluates to **true**, so this behaves identically to `SELECT * FROM smartphones` (no rows filtered out). It's commonly used as a placeholder in dynamically-built queries (e.g., in app code where more `AND` conditions get appended later).
+
+---
+
+## 4. Aliasing (`AS`)
+
+```sql
+SELECT model AS n, price AS p FROM dbms.smartphones;
+SELECT model, 'smartphones' AS 'type' FROM dbms.smartphones;
+```
+
+- `AS` renames a column (or expression) in the **output only** — it doesn't change the actual column name in the table.
+- Alias names with spaces or reserved words need quotes/backticks: `` `type` `` or `'type'` (MySQL is lenient with quotes here, but backticks `` ` `` are the standard way to quote identifiers in MySQL).
+- A literal string like `'smartphones'` can be selected as a constant column — useful for tagging rows when combining results from multiple tables (e.g., with `UNION`).
+
+---
+
+## 5. Computed / Derived Columns
+
+```sql
+SELECT model,
+  SQRT(resolution_height * resolution_height + resolution_width * resolution_width) / screen_size AS 'ppi'
+FROM dbms.smartphones;
+
+SELECT model, rating/10 FROM dbms.smartphones;
+```
+
+- SQL lets you compute new values on the fly using arithmetic operators (`+ - * /`) and functions (`SQRT()`, etc.) directly in the `SELECT` clause.
+- This example calculates **PPI (pixels per inch)** using the Pythagorean theorem: diagonal resolution in pixels ÷ screen size in inches.
+- `rating/10` — normalizes a rating (e.g., out of 100) down to a 0–10 scale. Note: no alias is given here, so the output column name will be the raw expression, e.g. `rating/10`.
+
+---
+
+## 6. DISTINCT
+
+```sql
+SELECT DISTINCT(brand_name) AS 'ALL_BRAND' FROM dbms.smartphones;
+SELECT processor_brand FROM dbms.smartphones;
+SELECT DISTINCT(processor_brand) AS 'processor' FROM dbms.smartphones;
+```
+
+- `DISTINCT` removes duplicate rows from the result set, keeping only unique values.
+- ⚠️ Common misconception: `DISTINCT(col)` looks like a function call, but the parentheses are **not required** — `DISTINCT` is a keyword, not a function. `SELECT DISTINCT brand_name` works identically.
+- Without `DISTINCT`, `SELECT processor_brand` returns one row per record (including repeats).
+
+---
+
+## Interview Questions & Answers
+
+### Beginner Level
+
+**Q1. What is the difference between `PRIMARY KEY` and `UNIQUE`?**
+A: Both enforce uniqueness, but a table can have only one `PRIMARY KEY` (which is also automatically `NOT NULL`), while it can have multiple `UNIQUE` columns, and most databases allow `NULL` in a `UNIQUE` column (though only one `NULL` per column typically, depending on the DB).
+
+**Q2. What does `AUTO_INCREMENT` do, and what happens if you insert an explicit value for that column?**
+A: It automatically assigns the next sequential integer when the column is left as `NULL`/omitted. If you insert an explicit value, MySQL uses that value instead, and the auto-increment counter updates to continue from the highest value used.
+
+**Q3. What's the difference between `WHERE 1` and no `WHERE` clause at all?**
+A: Functionally identical — both return all rows. `WHERE 1` is often used as a base condition in dynamically constructed queries so additional `AND` conditions can be appended programmatically without worrying about whether it's the "first" condition.
+
+**Q4. Does `SELECT DISTINCT(col)` treat `DISTINCT` as a function?**
+A: No — despite the parentheses, `DISTINCT` is a keyword modifying the whole `SELECT`, not a function applied to one column. `SELECT DISTINCT(a), b` still returns distinct rows based on the combination of `a` and `b`, not just distinct `a` values.
+
+**Q5. What is the purpose of column aliasing with `AS`?**
+A: To give a column or expression a more readable/custom name in the query's output, without altering the underlying table's schema.
+
+### Intermediate Level
+
+**Q6. If you run `SELECT DISTINCT(a), b FROM table`, does it return distinct values of `a` only, or distinct combinations of `a` and `b`?**
+A: Distinct combinations of `(a, b)` — a common trap, since the parentheses make it look like `DISTINCT` only applies to `a`.
+
+**Q7. Why might multi-row `INSERT` statements be preferred over multiple single-row inserts?**
+A: They reduce the number of round-trips to the database and the number of transaction/log operations, making bulk inserts significantly faster.
+
+**Q8. What error would occur if you tried to insert a user with an email that already exists in the table?**
+A: A duplicate-key/unique-constraint violation error (e.g., MySQL's `Error 1062: Duplicate entry '...' for key 'email'`), because `email` has a `UNIQUE` constraint.
+
+**Q9. How would you calculate PPI (pixels per inch) for a phone screen using SQL, given resolution height, width, and screen size?**
+A: `SQRT(height^2 + width^2) / screen_size` — compute the diagonal resolution using the Pythagorean theorem, then divide by the physical diagonal screen size.
+
+**Q10. What's the difference between `VALUE` and `VALUES` in an `INSERT` statement?**
+A: In MySQL, both work as aliases of each other, but `VALUES` is the ANSI SQL-standard keyword and is the more portable/recommended choice.
+
+### Slightly Advanced
+
+**Q11. Why is `SELECT *` discouraged in production code?**
+A: It fetches all columns even if unneeded (wasting bandwidth/memory), can break if the table schema changes (e.g., column order or new columns), and makes queries harder to optimize since the database can't use covering indexes as effectively.
+
+**Q12. Can a `UNIQUE` column contain more than one `NULL` value?**
+A: Depends on the DBMS. MySQL and SQL Server allow multiple `NULL`s in a `UNIQUE` column (since `NULL` isn't considered equal to another `NULL`), while some databases like Oracle behave differently under certain configurations.
+
+**Q13. What's the difference between filtering with `WHERE` and computing a value in `SELECT`?**
+A: `WHERE` filters which *rows* are returned based on a condition; a computed expression in `SELECT` doesn't filter rows — it transforms/derives a new value per row that's already included in the result.
+
+**Q14. If `screen_size` is `0` or `NULL` for a row, what happens to the PPI calculation?**
+A: Dividing by `0` typically returns `NULL` in MySQL (not an error, since MySQL by default doesn't throw a divide-by-zero exception), and dividing by `NULL` also returns `NULL`, since any arithmetic operation involving `NULL` yields `NULL`.
+
+---
+
+*Tip: Try rewriting Q6–Q14 as your own practice queries against the `smartphones`/`users` tables to reinforce these concepts.*
