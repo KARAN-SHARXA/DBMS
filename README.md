@@ -837,3 +837,99 @@ WHERE price > 200000;   -- should return 0 rows
 | `DELETE FROM ... WHERE` | Remove rows |
 
 **Golden Rule:** Before `UPDATE` or `DELETE`, always `SELECT` with the same `WHERE` clause first to preview affected rows.
+
+
+# Day 4 – SQL Notes (Aggregate Functions)
+
+Table used: `dbms.smartphones`
+
+Aggregate functions operate on a **set of rows** and return a **single summary value**.
+
+---
+
+## 1. `MAX()` — highest value
+
+```sql
+SELECT MAX(price) FROM dbms.smartphones;
+```
+
+Returns the single highest price in the whole table.
+
+```sql
+SELECT MAX(price) FROM dbms.smartphones
+WHERE brand_name = 'samsung';
+```
+
+Returns the highest price **only among Samsung phones** (combine with `WHERE` to scope the aggregate).
+
+⚠️ Watch spelling — `'smasung'` won't match anything and will silently return `NULL`. SQL doesn't autocorrect string values.
+
+---
+
+## 2. `MIN()` — lowest value
+
+```sql
+SELECT MIN(ram_capacity) FROM dbms.smartphones;
+```
+
+Returns the smallest RAM capacity across all rows.
+
+---
+
+## 3. `AVG()` — average value
+
+```sql
+SELECT AVG(rating) FROM dbms.smartphones
+WHERE brand_name = 'apple';
+```
+
+Returns the average rating of Apple phones only. `AVG` ignores `NULL` values automatically (doesn't count them in the denominator).
+
+---
+
+## 4. `SUM()` — total value
+
+```sql
+SELECT SUM(price) FROM dbms.smartphones;
+```
+
+Adds up the `price` column across all rows — total combined value of every phone in the table.
+
+---
+
+## 5. `COUNT(*)` — count rows
+
+```sql
+SELECT COUNT(*) FROM dbms.smartphones 
+WHERE brand_name = 'oneplus';
+```
+
+Counts how many rows match the condition (i.e., how many OnePlus phones exist), including rows with `NULL` in any column.
+
+---
+
+## 6. `COUNT(DISTINCT ...)` — count unique values
+
+```sql
+SELECT COUNT(DISTINCT(brand_name)) FROM dbms.smartphones;
+```
+
+Counts how many **unique** brand names exist in the table — not the number of rows, just the number of distinct brands.
+
+---
+
+## 🔑 Key Takeaways
+
+| Function | Purpose |
+|---|---|
+| `MAX(col)` | Highest value in a column |
+| `MIN(col)` | Lowest value in a column |
+| `AVG(col)` | Average of a column (ignores `NULL`) |
+| `SUM(col)` | Total of a column |
+| `COUNT(*)` | Number of rows matching condition |
+| `COUNT(DISTINCT col)` | Number of unique values in a column |
+
+**Notes:**
+- Aggregate functions can be combined with `WHERE` to scope the calculation to specific rows before aggregating.
+- `COUNT(*)` counts rows; `COUNT(column)` counts non-`NULL` values in that column — these can differ if there are `NULL`s.
+- A typo in a string filter (e.g. `'smasung'` instead of `'samsung'`) won't error — it just matches zero rows, so aggregates like `MAX`/`AVG`/`SUM` return `NULL`. Always double check spelling in `WHERE` conditions.
