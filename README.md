@@ -663,3 +663,177 @@ A: Dividing by `0` typically returns `NULL` in MySQL (not an error, since MySQL 
 ---
 
 *Tip: Try rewriting Q6–Q14 as your own practice queries against the `smartphones`/`users` tables to reinforce these concepts.*
+
+
+
+# Day 3 – SQL Notes (WHERE, Filtering, UPDATE, DELETE)
+
+Table used: `dbms.smartphones`
+
+---
+
+## 1. Basic `WHERE` filtering
+
+Filter rows using a condition on a column.
+
+```sql
+SELECT * FROM dbms.smartphones
+WHERE brand_name = 'samsung';
+```
+
+```sql
+SELECT * FROM dbms.smartphones
+WHERE price > 50000;
+```
+
+**Note:** String values (`'samsung'`) go in single quotes; numbers don't.
+
+---
+
+## 2. `BETWEEN`
+
+Used to filter values within a range (inclusive on both ends).
+
+```sql
+-- Old way (avoid — more verbose)
+SELECT * FROM dbms.smartphones
+WHERE price > 10000 AND price < 20000;
+
+-- Better way using BETWEEN
+SELECT * FROM dbms.smartphones
+WHERE price BETWEEN 10000 AND 20000;
+```
+
+⚠️ `BETWEEN 10000 AND 20000` includes **both** 10000 and 20000 (inclusive), while `price > 10000 AND price < 20000` **excludes** the boundary values. They are not exactly the same!
+
+---
+
+## 3. Combining conditions with `AND`
+
+All conditions must be true.
+
+```sql
+SELECT * FROM dbms.smartphones
+WHERE price < 25000 
+  AND rating > 80 
+  AND processor_brand = 'snapdragon';
+```
+
+```sql
+SELECT * FROM dbms.smartphones
+WHERE brand_name = 'samsung' 
+  AND ram_capacity > 8;
+```
+
+```sql
+SELECT * FROM dbms.smartphones
+WHERE brand_name = 'samsung' 
+  AND processor_brand = 'snapdragon';
+```
+
+---
+
+## 4. `DISTINCT`
+
+Removes duplicate values from the result — useful to see unique categories.
+
+```sql
+SELECT DISTINCT(brand_name) FROM dbms.smartphones
+WHERE price > 50000;
+```
+
+Returns the **unique list of brands** that have at least one phone priced above 50000 (not all matching rows).
+
+---
+
+## 5. `OR` vs `IN`
+
+Both do the same thing, but `IN` is cleaner when checking a column against multiple possible values.
+
+```sql
+-- Using OR (long form)
+SELECT * FROM dbms.smartphones
+WHERE processor_brand = 'snapdragon' 
+   OR processor_brand = 'exynos' 
+   OR processor_brand = 'bionic';
+```
+
+```sql
+-- Using IN (short form, same logic for 2 values)
+SELECT * FROM dbms.smartphones
+WHERE processor_brand IN ('snapdragon', 'exynos');
+```
+
+✅ `IN` is preferred for readability when checking multiple values of the **same column**.
+
+---
+
+## 6. `NOT IN`
+
+Opposite of `IN` — excludes the listed values.
+
+```sql
+SELECT * FROM dbms.smartphones
+WHERE processor_brand NOT IN ('snapdragon', 'exynos');
+```
+
+Returns all rows **except** those with snapdragon or exynos processors.
+
+---
+
+## 7. `UPDATE`
+
+Modifies existing rows that match a condition.
+
+```sql
+UPDATE dbms.smartphones
+SET processor_brand = 'dimensity'
+WHERE processor_brand = 'mediatek';
+```
+
+Then verify the change:
+
+```sql
+SELECT * FROM dbms.smartphones
+WHERE processor_brand = 'mediatek';   -- should return 0 rows now
+```
+
+⚠️ **Always run a `SELECT` with the same `WHERE` clause first** to confirm which rows will be affected before running `UPDATE` or `DELETE`. Without a `WHERE` clause, `UPDATE` changes **every row** in the table.
+
+---
+
+## 8. `DELETE`
+
+Removes rows permanently that match a condition.
+
+```sql
+-- Step 1: Check what will be deleted
+SELECT * FROM dbms.smartphones
+WHERE price > 200000;
+
+-- Step 2: Delete those rows
+DELETE FROM dbms.smartphones
+WHERE price > 200000;
+
+-- Step 3: Confirm deletion
+SELECT * FROM dbms.smartphones
+WHERE price > 200000;   -- should return 0 rows
+```
+
+⚠️ **Danger:** `DELETE FROM table_name;` (no `WHERE`) deletes **all rows** in the table. Always double-check the `WHERE` clause before running `DELETE`.
+
+---
+
+## 🔑 Key Takeaways
+
+| Concept | Purpose |
+|---|---|
+| `WHERE` | Filters rows based on condition(s) |
+| `BETWEEN a AND b` | Range filter (inclusive) |
+| `AND` / `OR` | Combine multiple conditions |
+| `IN` / `NOT IN` | Match/exclude a column against a list of values |
+| `DISTINCT` | Get unique values from a column |
+| `UPDATE ... SET ... WHERE` | Modify existing rows |
+| `DELETE FROM ... WHERE` | Remove rows |
+
+**Golden Rule:** Before `UPDATE` or `DELETE`, always `SELECT` with the same `WHERE` clause first to preview affected rows.
