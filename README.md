@@ -933,3 +933,126 @@ Counts how many **unique** brand names exist in the table — not the number of 
 - Aggregate functions can be combined with `WHERE` to scope the calculation to specific rows before aggregating.
 - `COUNT(*)` counts rows; `COUNT(column)` counts non-`NULL` values in that column — these can differ if there are `NULL`s.
 - A typo in a string filter (e.g. `'smasung'` instead of `'samsung'`) won't error — it just matches zero rows, so aggregates like `MAX`/`AVG`/`SUM` return `NULL`. Always double check spelling in `WHERE` conditions.
+# SQL Notes — Sorting Data (`ORDER BY` + `LIMIT`)
+
+**Table used:** `dbms.smartphones`
+**Topic of the day:** Sorting rows, picking top-N results, and combining sort with filters.
+
+---
+
+## 1. Sort by a single column, get top N
+
+```sql
+SELECT model, screen_size
+FROM dbms.smartphones
+WHERE brand_name = 'samsung'
+ORDER BY screen_size DESC
+LIMIT 5;
+```
+
+**What it does:** Filters to Samsung phones, sorts by `screen_size` largest → smallest, keeps only the top 5.
+
+**Key idea:** `WHERE` always runs before `ORDER BY` and `LIMIT`. So the engine filters first, *then* sorts, *then* trims the result.
+
+---
+
+## 2. Sort by a computed (derived) column
+
+```sql
+SELECT model, num_front_cameras + num_rear_cameras AS total_cameras
+FROM dbms.smartphones
+ORDER BY total_cameras DESC;
+```
+
+**What it does:** Creates a new column `total_cameras` on the fly by adding two existing columns, then sorts by it.
+
+**Key idea:** Once you give a computed column an alias (`AS total_cameras`), you can refer to that alias directly in `ORDER BY` — no need to repeat the whole expression. This only works because `ORDER BY` is evaluated *after* the `SELECT` list is built.
+
+---
+
+## 3. `LIMIT` with an offset — skipping rows
+
+```sql
+SELECT model, battery_capacity
+FROM dbms.smartphones
+ORDER BY battery_capacity DESC
+LIMIT 2, 1;
+```
+
+**What it does:** Gets the **3rd highest** battery capacity phone.
+
+**Key idea — the syntax that trips people up:**
+```
+LIMIT offset, count
+```
+- `offset = 2` → skip the first 2 rows (rank 1 and rank 2)
+- `count = 1` → return just 1 row after skipping
+
+So this returns the row at **rank 3**, not row "2 to 1". Equivalent, more readable version (standard SQL style):
+```sql
+LIMIT 1 OFFSET 2;
+```
+Both do the same thing — MySQL supports either form.
+
+---
+
+## 4. Sort ascending to find the "worst"/minimum
+
+```sql
+SELECT model, rating
+FROM dbms.smartphones
+WHERE brand_name = 'apple'
+ORDER BY rating ASC
+LIMIT 1;
+```
+
+**What it does:** Among Apple phones, finds the one with the **lowest** rating.
+
+**Key idea:** `ASC` is actually the default (you could drop it and get the same result), but writing it explicitly makes intent clear — especially useful when reading old queries later.
+
+---
+
+## 5. Multi-column sort
+
+```sql
+SELECT *
+FROM dbms.smartphones
+ORDER BY brand_name ASC, price ASC;
+```
+
+**What it does:** Sorts all rows first by `brand_name` alphabetically, and *within* each brand, sorts by `price` ascending.
+
+**Key idea:** In multi-column `ORDER BY`, the first column is the primary sort key; every column after it only matters for breaking ties within the previous column's groups. Order of columns in the clause = priority of sorting.
+
+---
+
+## Quick Reference Table
+
+| Concept | Syntax | Notes |
+|---|---|---|
+| Sort descending | `ORDER BY col DESC` | Largest/latest first |
+| Sort ascending | `ORDER BY col ASC` | Default if omitted |
+| Top N rows | `LIMIT N` | After sorting |
+| Skip + take (pagination) | `LIMIT offset, count` | offset is 0-indexed |
+| Sort by alias | `ORDER BY alias_name` | Alias must be defined in SELECT |
+| Multi-column sort | `ORDER BY col1, col2` | col2 breaks ties in col1 |
+| Filter before sort | `WHERE ... ORDER BY ...` | Execution order: WHERE → ORDER BY → LIMIT |
+
+---
+
+## Execution Order Cheat Sheet (important!)
+
+SQL doesn't run top-to-bottom the way it's written. Actual logical order:
+
+```
+FROM  →  WHERE  →  SELECT  →  ORDER BY  →  LIMIT
+```
+
+This is why you can use a `SELECT` alias inside `ORDER BY`, but **not** inside `WHERE` (since `WHERE` runs before `SELECT` builds the alias).
+
+---
+
+## Practice Ideas for Next Session
+- Try `ORDER BY` with a `CASE WHEN` for custom sort order (e.g., force a specific brand to always appear first).
+- Combine `GROUP BY` + `ORDER BY` (e.g., average rating per brand, sorted highest to lowest).
+- Explore `ORDER BY` with `NULL` values — where do NULLs land by default in MySQL?
