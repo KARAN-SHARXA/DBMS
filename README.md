@@ -1056,3 +1056,159 @@ This is why you can use a `SELECT` alias inside `ORDER BY`, but **not** inside `
 - Try `ORDER BY` with a `CASE WHEN` for custom sort order (e.g., force a specific brand to always appear first).
 - Combine `GROUP BY` + `ORDER BY` (e.g., average rating per brand, sorted highest to lowest).
 - Explore `ORDER BY` with `NULL` values — where do NULLs land by default in MySQL?
+
+
+
+# SQL Notes — GROUP BY (Grouping & Aggregation)
+
+Dataset used in examples: `dbms.smartphones`
+
+---
+
+## 1. Core Concept
+
+`GROUP BY` collapses multiple rows that share the same value in a column into a single summary row, so you can run **aggregate functions** (`COUNT`, `AVG`, `MAX`, `MIN`, `SUM`) on each group instead of the whole table.
+
+**General syntax:**
+```sql
+SELECT column, AGG_FUNC(other_column)
+FROM table
+WHERE row_level_filter        -- filters rows BEFORE grouping
+GROUP BY column
+HAVING group_level_filter     -- filters groups AFTER aggregation
+ORDER BY sort_column
+LIMIT n;
+```
+
+**Order of execution (important!):**
+```
+FROM → WHERE → GROUP BY → HAVING → SELECT → ORDER BY → LIMIT
+```
+This is why `WHERE` can't filter on an aggregate (e.g. `WHERE COUNT(*) > 10` fails) — you need `HAVING` for that, since aggregates don't exist yet at the `WHERE` stage.
+
+---
+
+## 2. Query-by-Query Breakdown
+
+### 2.1 Multiple aggregates per group, sorted & limited
+```sql
+SELECT brand_name, COUNT(*) AS 'num_phones',
+       ROUND(AVG(price)) AS 'avg_price',
+       MAX(rating) AS 'max_rating',
+       ROUND(AVG(screen_size)) AS 'avg screen size'
+FROM dbms.smartphones
+GROUP BY brand_name
+ORDER BY num_phones DESC LIMIT 15;
+```
+**What it teaches:** you can compute several different aggregates (`COUNT`, `AVG`, `MAX`) in one `GROUP BY` query. `ROUND()` wraps `AVG()` to clean decimals. Sorting is done on the aggregate's alias (`num_phones`), and `LIMIT` gives you a "top N" report — here, the 15 brands with the most models.
+
+### 2.2 Grouping by a boolean/flag column
+```sql
+SELECT has_nfc, AVG(price) AS 'avg price', AVG(rating) AS 'rating'
+FROM dbms.smartphones
+GROUP BY has_nfc;
+```
+**What it teaches:** grouping isn't limited to categories like brand — any column with a small set of repeating values (here just True/False) works. This compares average price and rating for NFC vs non-NFC phones — a 2-row result.
+
+### 2.3 Same pattern, different flag column
+```sql
+SELECT extended_memory_available, AVG(price) AS 'avg price', AVG(rating) AS 'rating'
+FROM dbms.smartphones
+GROUP BY extended_memory_available;
+```
+Identical structure to 2.2, reinforcing that this is a repeatable pattern for any binary feature column.
+
+### 2.4 Grouping by two columns at once
+```sql
+SELECT brand_name, processor_brand,
+       COUNT(*) AS 'num phone',
+       AVG(primary_camera_rear) AS 'avg camera resolution'
+FROM dbms.smartphones
+GROUP BY brand_name, processor_brand;
+```
+**What it teaches:** `GROUP BY` can take multiple columns. SQL creates one group per **unique combination** of `brand_name` + `processor_brand` (e.g. Samsung+Exynos, Samsung+Snapdragon are separate groups). Useful for drilling into sub-categories within a category.
+
+### 2.5 Top-N by an aggregate (highest)
+```sql
+SELECT brand_name, ROUND(AVG(price)) AS 'avg_price'
+FROM dbms.smartphones
+GROUP BY brand_name
+ORDER BY avg_price DESC LIMIT 5;
+```
+Finds the 5 **most expensive** brands on average. Pattern: aggregate → alias → `ORDER BY alias DESC` → `LIMIT`.
+
+### 2.6 Top-N by an aggregate (lowest)
+```sql
+SELECT brand_name, AVG(screen_size) AS screen_size
+FROM dbms.smartphones
+GROUP BY brand_name
+ORDER BY screen_size ASC LIMIT 5;
+```
+Same pattern as 2.5 but `ASC` — the 5 brands with the **smallest** average screen size.
+
+### 2.7 WHERE before GROUP BY, single-group answer
+```sql
+SELECT brand_name, COUNT(*) AS 'count'
+FROM dbms.smartphones
+WHERE has_nfc = 'True' AND has_ir_blaster = 'true'
+GROUP BY brand_name
+ORDER BY count DESC LIMIT 1;
+```
+**What it teaches:** `WHERE` filters raw rows *before* grouping — here it keeps only phones with both NFC and IR blaster. Then grouping + `ORDER BY ... LIMIT 1` picks the single brand with the most such phones. This shows the correct way to combine row-level filtering with group-level ranking.
+
+### 2.8 WHERE narrows to one brand, then groups within it
+```sql
+SELECT has_nfc, AVG(price) AS 'avg_price'
+FROM dbms.smartphones
+WHERE brand_name = 'samsung'
+GROUP BY has_nfc;
+```
+**What it teaches:** `WHERE` can scope the whole analysis to a subset (only Samsung phones), and the `GROUP BY` then runs *within* that subset — comparing NFC vs non-NFC price only among Samsung phones.
+
+### 2.9 HAVING to filter groups by size
+```sql
+SELECT brand_name, COUNT(*) AS 'count', AVG(price) AS 'avg_price'
+FROM dbms.smartphones
+GROUP BY brand_name
+HAVING count > 20
+ORDER BY avg_price DESC;
+```
+**What it teaches:** the key use of `HAVING` — filtering groups based on an aggregate result (`COUNT(*) > 20`), which `WHERE` cannot do. This removes brands with too few phones (statistically less reliable averages) before ranking by price.
+> Note: some SQL dialects (strict MySQL/ANSI modes) don't allow referencing a column alias like `count` inside `HAVING`; you may need `HAVING COUNT(*) > 20` instead, depending on settings.
+
+### 2.10 Combining WHERE + GROUP BY + HAVING + ORDER BY + LIMIT
+```sql
+SELECT brand_name, AVG(ram_capacity) AS 'avg_ram'
+FROM dbms.smartphones
+WHERE refresh_rate > 90 AND fast_charging_available = 1
+GROUP BY brand_name
+HAVING COUNT(*) > 10
+ORDER BY avg_ram DESC LIMIT 3;
+```
+**What it teaches:** the full pipeline in one query —
+1. `WHERE` keeps only phones with high refresh rate + fast charging.
+2. `GROUP BY brand_name` groups the filtered rows.
+3. `HAVING COUNT(*) > 10` keeps only brands with a decent sample size.
+4. `ORDER BY avg_ram DESC LIMIT 3` returns the top 3 brands by average RAM.
+> Tip: `ORDER BY avg_ram` (no quotes) is safer than `ORDER BY 'avg_ram'` — a quoted string is treated as a literal, not a column reference, in some engines.
+
+---
+
+## 3. Key Takeaways / Cheat Sheet
+
+| Clause | Filters on | Runs |
+|---|---|---|
+| `WHERE` | raw row values | before grouping |
+| `GROUP BY` | — | creates the groups |
+| `HAVING` | aggregate results | after grouping |
+| `ORDER BY` | any selected column/alias | after aggregation |
+| `LIMIT` | row count of final result | last |
+
+**Common aggregate functions:** `COUNT(*)`, `AVG()`, `SUM()`, `MIN()`, `MAX()`, often wrapped in `ROUND()` for cleaner output.
+
+**Patterns to remember:**
+- Group by 1 column → summary per category.
+- Group by 2+ columns → summary per unique combination.
+- "Top N" report = aggregate + `ORDER BY` alias + `LIMIT`.
+- Need to filter by a raw column → `WHERE`. Need to filter by an aggregate (like count or avg) → `HAVING`.
+- `WHERE` + `GROUP BY` together = "analyze this subset, broken down by category."
